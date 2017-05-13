@@ -14,19 +14,26 @@ int debug = 0;
 
 void execute(cmdLine *pCmdLine){
 	int pid;
+	int* status = 0;
 	pid = fork();
 	if(pid == -1 && debug){
 		perror("There was an error in fork \n");
+		fprintf(stderr,"Pid: %d \n",pid);
 	}
 	else if(pid == 0){
 		int result = execvp(pCmdLine->arguments[0],pCmdLine->arguments);
 		if(!result && debug){
 			perror("error happened!!");
+			_exit(result);
 
+		}
+		else if(debug){
+			fprintf(stderr,"Pid: %d \n",pid);
 		}
 		exit(0);
 	}
-	wait();
+	if(pCmdLine->blocking == 1)
+		waitpid(pid,&status,0);
 }
 
 void signalHandler(int signal){
@@ -37,6 +44,20 @@ void signalHandler(int signal){
 
 }
 
+void changeDir(cmdLine* cmd){
+	int retval;
+	char dir[PATH_MAX];
+	retval = chdir(cmd->arguments[1]);
+	if(retval == -1){
+		perror("error ocuured in chdir \n");
+	}
+	else{
+		printf("current directory: \n");
+		getcwd(dir, PATH_MAX);
+		printf(dir,PATH_MAX);
+		printf("\n");
+	}
+}
 int main(int argc,char** argv){
 	/*check if debug mode*/
 	if(argc > 1){
@@ -54,8 +75,14 @@ int main(int argc,char** argv){
 		signal(SIGQUIT,signalHandler);
 		signal(SIGTSTP,signalHandler);
 		signal(SIGCHLD,signalHandler);
-		execute(cmd);
-		free(cmd);
+		if(strcmp(cmd->arguments[0],"cd") == 0){
+			changeDir(cmd);
+			freeCmdLines(cmd);
+		}
+		else{
+			execute(cmd);
+			freeCmdLines(cmd);
+		}
 		fgets(buffer,2048,stdin);
 		cmd = parseCmdLines(buffer);
 	}
