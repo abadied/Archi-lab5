@@ -85,6 +85,9 @@ int main(int argc,char** argv){
 			execute(cmd);
 			freeCmdLines(cmd);
 		}
+		getcwd(buffer, PATH_MAX);
+		printf(buffer,PATH_MAX);
+		printf("\n");
 		fgets(buffer,2048,stdin);
 		cmd = parseCmdLines(buffer);
 	}

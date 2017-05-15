@@ -1,5 +1,6 @@
 #include "JobControl.h"
 
+
 /**
 * Receive a pointer to a job list and a new command to add to the job list and adds it to it.
 * Create a new job list if none exists.
@@ -100,7 +101,8 @@ void freeJobList(job** job_list){
 * receives a pointer to a job, and frees it along with all memory allocated for its fields.
 **/
 void freeJob(job* job_to_remove){
-
+	free(job_to_remove->tmodes);
+	/* chek if need to be done recursively */
 }
 
 
@@ -111,8 +113,15 @@ void freeJob(job* job_to_remove){
 * to copy cmd, and to initialize the rest of the fields to NULL: next, pigd, status 
 **/
 
-job* initializeJob(char* cmd){
-	
+job* initializeJob(char* cmd){ /*i added index to the signature*/
+	job* new_job = (job*)malloc(sizeof(job));
+	new_job->cmd = cmd;
+	new_job->idx = 0;
+	new_job->pgid = 0;
+	new_job->status = 1;
+	new_job->tmodes = (struct termios*)malloc(sizeof(struct termios));
+	new_job->next = NULL;
+	return new_job;
 }
 
 
@@ -121,7 +130,14 @@ job* initializeJob(char* cmd){
 * Print an error message if no job with such an index exists.
 **/
 job* findJobByIndex(job* job_list, int idx){
-  
+  job* curr_job = job_list;
+  while(!curr_job){
+  	if(curr_job->idx == idx)
+  		return curr_job;
+  	else
+  		curr_job = curr_job->next;
+  }
+  return NULL;
 }
 
 
@@ -130,6 +146,20 @@ job* findJobByIndex(job* job_list, int idx){
 * jobs from the job list or not. 
 **/
 void updateJobList(job **job_list, int remove_done_jobs){
+	job* curr_job = *job_list;
+	while(!curr_job){
+		waitpid(curr_job->pgid,&(curr_job->status),WNOHANG);
+		if(remove_done_jobs){
+			if(curr_job->status == DONE){
+				printf("[%d]\t %s \t\t %s", curr_job->idx, statusToStr(curr_job->status),curr_job -> cmd); 
+				if (curr_job -> cmd[strlen(curr_job -> cmd)-1]  != '\n')
+					printf("\n");
+				job* job_to_remove = curr_job;
+				removeJob(job_list, job_to_remove);
+			}
+		}
+		curr_job = curr_job->next;
+	}
 
 }
 
@@ -150,3 +180,6 @@ void runJobInForeground (job** job_list, job *j, int cont, struct termios* shell
 void runJobInBackground (job *j, int cont){	
  
 }
+
+
+/*functions i added*/
