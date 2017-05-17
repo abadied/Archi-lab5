@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include "JobControl.h"
 
 #define STDIN 0
 #define STDOUT 1
@@ -32,10 +33,10 @@ void execute(cmdLine *pCmdLine){
 		else if(debug){
 			fprintf(stderr,"Pid: %d \n",pid);
 		}
-		exit(0);
+		_exit(0);
 	}
 	if(pCmdLine->blocking == 1)
-		waitpid(pid,&status,0);
+		waitpid(pid,status,0);
 }
 
 void signalHandler(int signal){
@@ -72,14 +73,19 @@ int main(int argc,char** argv){
 	printf(buffer,PATH_MAX);
 	printf("\n");
 	fgets(buffer,2048,stdin);
+	job* jobs_list = NULL;
 	cmdLine* cmd = parseCmdLines(buffer);
 	while(strcmp(cmd->arguments[0],"quit") != 0){
+		job* curr_job = addJob(&jobs_list, buffer);
 		signal(SIGQUIT,signalHandler);
 		signal(SIGTSTP,signalHandler);
 		signal(SIGCHLD,signalHandler);
 		if(strcmp(cmd->arguments[0],"cd") == 0){
 			changeDir(cmd);
 			freeCmdLines(cmd);
+		}
+		else if(strcmp(cmd->arguments[0],"jobs")==0 && &(jobs_list)!=NULL){
+			printJobs(&jobs_list);
 		}
 		else{
 			execute(cmd);
@@ -91,6 +97,8 @@ int main(int argc,char** argv){
 		fgets(buffer,2048,stdin);
 		cmd = parseCmdLines(buffer);
 	}
+	if(jobs_list!=NULL)
+		freeJobList(&jobs_list);
 	return 0;
 }
 

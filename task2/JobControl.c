@@ -101,7 +101,11 @@ void freeJobList(job** job_list){
 * receives a pointer to a job, and frees it along with all memory allocated for its fields.
 **/
 void freeJob(job* job_to_remove){
-	free(job_to_remove->tmodes);
+	if(job_to_remove){
+		free(job_to_remove->tmodes);
+		free(job_to_remove->cmd);
+		free(job_to_remove);
+	}
 	/* chek if need to be done recursively */
 }
 
@@ -115,12 +119,13 @@ void freeJob(job* job_to_remove){
 
 job* initializeJob(char* cmd){ /*i added index to the signature*/
 	job* new_job = (job*)malloc(sizeof(job));
-	new_job->cmd = cmd;
-	new_job->idx = 0;
+	new_job->cmd = (char*)malloc(sizeof(cmd));
+	new_job->idx = 1;
 	new_job->pgid = 0;
-	new_job->status = 1;
+	new_job->status = RUNNING;
 	new_job->tmodes = (struct termios*)malloc(sizeof(struct termios));
 	new_job->next = NULL;
+	strcpy(new_job->cmd, cmd);
 	return new_job;
 }
 
@@ -137,6 +142,7 @@ job* findJobByIndex(job* job_list, int idx){
   	else
   		curr_job = curr_job->next;
   }
+  fprintf(stderr,"index doesnt exists! \n");
   return NULL;
 }
 
