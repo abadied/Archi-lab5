@@ -101,11 +101,9 @@ void freeJobList(job** job_list){
 * receives a pointer to a job, and frees it along with all memory allocated for its fields.
 **/
 void freeJob(job* job_to_remove){
-	if(job_to_remove){
-		free(job_to_remove->tmodes);
-		free(job_to_remove->cmd);
-		free(job_to_remove);
-	}
+	free(job_to_remove->tmodes);
+	/*free(job_to_remove->cmd);*/
+	free(job_to_remove);
 }
 
 
@@ -135,7 +133,7 @@ job* initializeJob(char* cmd){ /*i added index to the signature*/
 **/
 job* findJobByIndex(job* job_list, int idx){
   job* curr_job = job_list;
-  while(!curr_job){
+  while(curr_job){
   	if(curr_job->idx == idx)
   		return curr_job;
   	else
@@ -152,21 +150,24 @@ job* findJobByIndex(job* job_list, int idx){
 **/
 void updateJobList(job **job_list, int remove_done_jobs){
 	job* curr_job = *job_list;
-	while(!curr_job){
+	while(curr_job){
 		int status;
 		int retval = waitpid(curr_job->pgid, &status, WNOHANG);
-		if(remove_done_jobs){
-			if(retval == -1){
-				printf("[%d]\t %s \t\t %s", curr_job->idx, statusToStr(curr_job->status),curr_job -> cmd); 
-				if (curr_job -> cmd[strlen(curr_job -> cmd)-1]  != '\n')
-					printf("\n");
-				job* job_to_remove = curr_job;
-				removeJob(job_list, job_to_remove);
-			}
+		printf("ret: %d\n", retval);
+		job* next_job = curr_job->next;
+		printf("next: %d\n", (int)next_job);
+		if(retval == -1 || (retval == curr_job->pgid && WIFEXITED(status))){
+			curr_job->status = DONE;
 		}
-		curr_job = curr_job->next;
+		if(curr_job->status == DONE && remove_done_jobs){
+			printf("[%d]\t %s \t\t %s", curr_job->idx, statusToStr(curr_job->status),curr_job -> cmd); 
+			if (curr_job -> cmd[strlen(curr_job -> cmd)-1]  != '\n')
+				printf("\n");
+			
+			removeJob(job_list, curr_job);
+		}
+		curr_job = next_job;
 	}
-
 }
 
 /** 
@@ -175,14 +176,14 @@ void updateJobList(job **job_list, int remove_done_jobs){
 **/
 
 void runJobInForeground (job** job_list, job *j, int cont, struct termios* shell_tmodes, pid_t shell_pgid){
-	if (waitpid(j->pgid, &(j->status), WNOHANG) == -1) {
-		perror("bad pgid for job");
+	int status;
+	if (waitpid(j->pgid, &status, WNOHANG) == -1) {
+		j->status = DONE;
 	}
-	else if (j->status == DONE) {
+	if (j->status == DONE) {
 		printf("[%d]\t %s \t\t %s", j->idx, statusToStr(j->status),j -> cmd); 
 		if (j -> cmd[strlen(j -> cmd)-1]  != '\n')
 			printf("\n");
-		/*plz no segfault*/
 		removeJob(job_list, j);
 	}
 	else {
@@ -190,7 +191,6 @@ void runJobInForeground (job** job_list, job *j, int cont, struct termios* shell
 		if (j->status == SUSPENDED && cont == 1)
 			tcsetattr(STDIN_FILENO, TCSADRAIN, j->tmodes);
 		kill(j->pgid, SIGCONT);
-		int status;
 		waitpid(j->pgid, &status, WUNTRACED);
 		if (WIFSTOPPED(status)) {
 			if (WSTOPSIG(status) == SIGTSTP){
@@ -200,13 +200,11 @@ void runJobInForeground (job** job_list, job *j, int cont, struct termios* shell
 				j->status = DONE;
 			}
 		}
-		
 		tcsetpgrp(STDIN_FILENO, shell_pgid);
 		tcgetattr(STDIN_FILENO, j->tmodes);
 		tcsetattr(STDIN_FILENO, TCSADRAIN, shell_tmodes);
 		updateJobList(job_list, 1);
 	}
-	
 }
 
 /** 
@@ -215,7 +213,8 @@ void runJobInForeground (job** job_list, job *j, int cont, struct termios* shell
 **/
 
 void runJobInBackground (job *j, int cont){	
-	
+	if (cont)
+		kill(j->pgid, SIGCONT);
 }
 
 

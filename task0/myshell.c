@@ -1,49 +1,51 @@
-#include "LineParser.h"
-#include <stdlib.h>
-#include <linux/limits.h>
-#include <unistd.h>
+#define _GNU_SOURCE
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <linux/limits.h>
+#include "LineParser.h"
 
-#define STDIN 0
-#define STDOUT 1
-#define STDERR 2
+#define MAXBUFFSIZE 2048
 
-int execute(cmdLine *pCmdLine){
-	int result = execv(pCmdLine->arguments[0],pCmdLine->arguments);
-	if(!result){
-		perror("error happened!!");
+#define true 1
+#define false 0
 
-	}
-	return result;
+int execute(cmdLine *pCmdLine) {
+  int result = execv(pCmdLine->arguments[0],pCmdLine->arguments);
+  if (result) {
+    perror("error in execute");
+    exit(EXIT_FAILURE);
+  }
+  return result;
 }
 
-void signalHandler(int signal){
-	char*  sig = strsignal(signal);
-	printf("signal caught:\n");
-	printf("%s",sig);
-	printf("\n");
-
+void sigHandler(int signum) {
+  char* strsig = strsignal(signum);
+  printf("signal caught and ignored: %s\n", strsig);
 }
 
-int main(int argc,char** argv){
-	char buffer[2048];
-	
-	getcwd(buffer, PATH_MAX);
-	printf(buffer,PATH_MAX);
-	printf("\n");
-	fgets(buffer,2048,stdin);
-	cmdLine* cmd = parseCmdLines(buffer);
-	while(strcmp(cmd->arguments[0],"quit") != 0){
-		signal(SIGQUIT,signalHandler);
-		signal(SIGTSTP,signalHandler);
-		signal(SIGCHLD,signalHandler);
-		execute(cmd);
-		free(cmd);
-		fgets(buffer,2048,stdin);
-		cmd = parseCmdLines(buffer);
-	}
-	return 0;
-}
+int main(int argc, char** argv) {
+  char readbuffer[MAXBUFFSIZE];
+  char path[PATH_MAX];
 
+  getcwd(path, PATH_MAX);
+
+  signal(SIGQUIT,sigHandler);
+  signal(SIGTSTP,sigHandler);
+  signal(SIGCHLD,sigHandler);
+
+  while (true) {
+    printf("%s$ ", path);
+    fgets(readbuffer, MAXBUFFSIZE, stdin);
+
+    cmdLine *line = parseCmdLines(readbuffer);
+    if (!strcmp(line->arguments[0], "quit"))
+      break;
+
+    execute(line);
+  }
+
+  return 0;
+}

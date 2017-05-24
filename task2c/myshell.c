@@ -15,7 +15,9 @@
 
 
 int debug = 0;
+job* jobs_list = NULL;
 
+void sigHandler(int signum);
 void execute(cmdLine *pCmdLine, job* curr_job){
 	int pid;
 	int status;
@@ -26,16 +28,14 @@ void execute(cmdLine *pCmdLine, job* curr_job){
 			perror("fork failed");
 		break;
 		case 0:
+			setpgid(0, getpid());
+
 			signal(SIGQUIT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
 			signal(SIGTSTP, SIG_DFL);
 			signal(SIGTTIN, SIG_DFL);
 			signal(SIGTTOU, SIG_DFL);
-			
-			setpgid(0, getpid());
-			
-			curr_job->pgid = getpgid(0);
-			
+
 			if(execvp(pCmdLine->arguments[0],pCmdLine->arguments)){
 				perror("error in execution");
 				_exit(EXIT_FAILURE);
@@ -43,11 +43,12 @@ void execute(cmdLine *pCmdLine, job* curr_job){
 			_exit(EXIT_SUCCESS);
 		break;
 		default:
+			curr_job->pgid = pid;
 			if (debug)
 				fprintf(stderr,"Executing Command: %s\nChild PID: %d\n",pCmdLine->arguments[0],pid);
 			if (pCmdLine->blocking == 1){
-				waitpid(pid, &status, 0);
 				setpgid(0, getpid());
+				waitpid(pid, &status, WUNTRACED);
 			}
 	}
 }
@@ -64,7 +65,7 @@ void changeDir(cmdLine* cmd){
 		perror("error ocuured in chdir \n");
 	}
 }
-
+	
 int main(int argc,char** argv){
 	/*check if debug mode*/
 	if(argc > 1){
@@ -85,7 +86,7 @@ int main(int argc,char** argv){
     printf("%s$ ", path);
 
 	fgets(buffer,2048,stdin);
-	job* jobs_list = NULL;
+	
 	
 	struct termios* termios_p = (struct termios*)malloc(sizeof(struct termios));
 	tcgetattr(STDIN_FILENO, termios_p);
@@ -95,12 +96,18 @@ int main(int argc,char** argv){
 		if(strcmp(cmd->arguments[0],"cd") == 0){
 			changeDir(cmd);
 		}
-		else if(strcmp(cmd->arguments[0],"jobs") == 0 && jobs_list != NULL){
+		else if(strcmp(cmd->arguments[0],"jobs") == 0){
 			printJobs(&jobs_list);
 		}
 		else if(strcmp(cmd->arguments[0], "fg") == 0) {
 			job* curr_job = findJobByIndex(jobs_list, atoi(cmd->arguments[1]));
-			runJobInForeground(&jobs_list, curr_job,1 , termios_p, getpgid(0));
+			if (curr_job)
+				runJobInForeground(&jobs_list, curr_job,1 , termios_p, getpgid(0));
+		}
+		else if(strcmp(cmd->arguments[0], "bg") == 0) {
+			job* curr_job = findJobByIndex(jobs_list, atoi(cmd->arguments[1]));
+			if (curr_job)
+				runJobInBackground(curr_job, 1); 
 		}
 		else {
 			job* curr_job = addJob(&jobs_list, buffer);
@@ -108,7 +115,7 @@ int main(int argc,char** argv){
 			
 		}
 		
-		freeCmdLines(cmd);
+		/*freeCmdLines(cmd);*/
 		
 		getcwd(path, PATH_MAX);
     	printf("%s$ ", path);

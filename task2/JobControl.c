@@ -106,7 +106,6 @@ void freeJob(job* job_to_remove){
 		free(job_to_remove->cmd);
 		free(job_to_remove);
 	}
-	/* chek if need to be done recursively */
 }
 
 

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "LineParser.h"
 #include <stdlib.h>
 #include <linux/limits.h>
@@ -5,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #define STDIN 0
 #define STDOUT 1
@@ -15,47 +17,36 @@ int debug = 0;
 void execute(cmdLine *pCmdLine){
 	int pid;
 	int* status = 0;
-	pid = fork();
-	if(pid == -1 && debug){
-		perror("There was an error in fork \n");
-		fprintf(stderr,"Pid: %d \n",pid);
-	}
-	else if(pid == 0){
-		int result = execvp(pCmdLine->arguments[0],pCmdLine->arguments);
-		if(!result && debug){
-			perror("error happened!!");
-			_exit(result);
 
-		}
-		else if(debug){
-			fprintf(stderr,"Pid: %d \n",pid);
-		}
-		exit(0);
+	switch (pid = fork()) {
+		case -1:
+		if (debug)
+			perror("fork failed");
+		_exit(EXIT_FAILURE);
+		break;
+		case 0:
+			if(execvp(pCmdLine->arguments[0],pCmdLine->arguments)){
+				perror("error in execution");
+				_exit(EXIT_FAILURE);
+			}
+			_exit(EXIT_SUCCESS);
+		break;
+		default:
+			if (debug)
+				fprintf(stderr,"Executing Command: %s\nChild PID: %d\n",pCmdLine->arguments[0],pid);
+			if (pCmdLine->blocking == 1)
+				waitpid(pid, status, 0);
 	}
-	if(pCmdLine->blocking == 1)
-		waitpid(pid,&status,0);
 }
 
-void signalHandler(int signal){
-	char*  sig = strsignal(signal);
-	printf("signal caught:\n");
-	printf("%s",sig);
-	printf("\n");
-
+void sigHandler(int signum) {
+  char* strsig = strsignal(signum);
+  printf("signal caught and ignored: %s\n", strsig);
 }
 
 void changeDir(cmdLine* cmd){
-	int retval;
-	char dir[PATH_MAX];
-	retval = chdir(cmd->arguments[1]);
-	if(retval == -1){
-		perror("error ocuured in chdir \n");
-	}
-	else{
-		printf("current directory: \n");
-		getcwd(dir, PATH_MAX);
-		printf(dir,PATH_MAX);
-		printf("\n");
+	if(chdir(cmd->arguments[1])){
+		perror("error ocuured in chdir");
 	}
 }
 int main(int argc,char** argv){
@@ -65,16 +56,20 @@ int main(int argc,char** argv){
 			debug = 1;
 	}
 
+	signal(SIGQUIT,sigHandler);
+	signal(SIGTSTP,sigHandler);
+	signal(SIGCHLD,sigHandler);
+
 	char buffer[2048];
-	getcwd(buffer, PATH_MAX);
-	printf(buffer,PATH_MAX);
-	printf("\n");
+	char path[PATH_MAX];
+
+	getcwd(path, PATH_MAX);
+    printf("%s$ ", path);
+
 	fgets(buffer,2048,stdin);
 	cmdLine* cmd = parseCmdLines(buffer);
 	while(strcmp(cmd->arguments[0],"quit") != 0){
-		signal(SIGQUIT,signalHandler);
-		signal(SIGTSTP,signalHandler);
-		signal(SIGCHLD,signalHandler);
+		
 		if(strcmp(cmd->arguments[0],"cd") == 0){
 			changeDir(cmd);
 			freeCmdLines(cmd);
@@ -83,6 +78,8 @@ int main(int argc,char** argv){
 			execute(cmd);
 			freeCmdLines(cmd);
 		}
+		getcwd(path, PATH_MAX);
+    	printf("%s$ ", path);
 		fgets(buffer,2048,stdin);
 		cmd = parseCmdLines(buffer);
 	}
